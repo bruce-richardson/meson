@@ -211,16 +211,25 @@ class ExtractedObjects:
     '''
     Holds a list of sources for which the objects must be extracted
     '''
-    def __init__(self, target, srclist, genlist, is_unity):
+    def __init__(self, target, srclist, genlist, is_unity, recursive_objects):
         self.target = target
         self.srclist = srclist
         self.genlist = genlist
+        self.recursive_objects = recursive_objects
         if is_unity:
             self.check_unity_compatible()
 
     def __repr__(self):
         r = '<{0} {1!r}: {2}>'
         return r.format(self.__class__.__name__, self.target.name, self.srclist)
+
+    def get_recursive_objects(self):
+        recursive_objs = []
+        if self.recursive_objects:
+            for s in self.recursive_objects:
+                recursive_objs.append(s)
+                recursive_objs += s.get_recursive_objects()
+        return recursive_objs
 
     def check_unity_compatible(self):
         # Figure out if the extracted object list is compatible with a Unity
@@ -414,6 +423,7 @@ class BuildTarget(Target):
                 s = s.held_object
             if isinstance(s, (str, File, ExtractedObjects)):
                 self.objects.append(s)
+                self.objects += s.get_recursive_objects()
             elif isinstance(s, (GeneratedList, CustomTarget)):
                 msg = 'Generated files are not allowed in the \'objects\' kwarg ' + \
                     'for target {!r}.\nIt is meant only for '.format(self.name) + \
@@ -630,13 +640,11 @@ class BuildTarget(Target):
             if src not in self.sources:
                 raise MesonException('Tried to extract unknown source %s.' % src)
             obj_src.append(src)
-        return ExtractedObjects(self, obj_src, [], self.is_unity)
+        return ExtractedObjects(self, obj_src, [], self.is_unity, None)
 
     def extract_all_objects(self):
-        # FIXME: We should add support for transitive extract_objects()
-        if self.objects:
-            raise MesonException('Cannot extract objects from a target that itself has extracted objects')
-        return ExtractedObjects(self, self.sources, self.generated, self.is_unity)
+        return ExtractedObjects(self, self.sources, self.generated,
+            self.is_unity, self.objects)
 
     def get_all_link_deps(self):
         return self.get_transitive_link_deps()
